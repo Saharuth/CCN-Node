@@ -740,36 +740,37 @@ void update_icache(void *pvParameter){
                     + (my_icache.entry[i].ET[1]*60*1000*1000) + (my_icache.entry[i].ET[2]*1000*1000)
                     + (my_icache.entry[i].ET[3]*1000) + (my_icache.entry[i].ET[4]);
             if (current_time >= expir_time){
-                if (my_icache.number_entry - i == 1){
-                    my_icache.entry[i].ID = 0;
-                    my_icache.entry[i].SR = 0;
-                    for( int j=0; j<5; j++){
-                        my_icache.entry[i].TS[j] = 0;
-                        my_icache.entry[i].ET[j] = 0;
+                for (int j=i; j<my_icache.number_entry; j++){
+                    if (my_icache.number_entry - j == 1){
+                        my_icache.entry[j].ID = 0;
+                        my_icache.entry[j].SR = 0;
+                        for( int k=0; k<5; k++){
+                            my_icache.entry[j].TS[k] = 0;
+                            my_icache.entry[j].ET[k] = 0;
+                        }
+                        memmove( my_icache.entry[j].ATTR, " ", strlen(my_icache.entry[j].ATTR));
+                        memmove( my_icache.entry[j].REGION, " ", strlen(my_icache.entry[j].REGION));
                     }
-                    memmove( my_icache.entry[i].ATTR, " ", strlen(my_icache.entry[i].ATTR));
-                    memmove( my_icache.entry[i].REGION, " ", strlen(my_icache.entry[i].REGION));
-                }
-                else{
-                    my_icache.entry[i].ID = my_icache.entry[i+1].ID;
-                    my_icache.entry[i].SR = my_icache.entry[i+1].SR;
-                    for( int j=0; j<5; j++){
-                        my_icache.entry[i].TS[j] = my_icache.entry[i+1].TS[j];
-                        my_icache.entry[i].ET[j] = my_icache.entry[i+1].ET[j];
+                    else{
+                        my_icache.entry[j].ID = my_icache.entry[j+1].ID;
+                        my_icache.entry[j].SR = my_icache.entry[j+1].SR;
+                        for( int k=0; k<5; k++){
+                            my_icache.entry[j].TS[k] = my_icache.entry[j+1].TS[k];
+                            my_icache.entry[j].ET[k] = my_icache.entry[j+1].ET[k];
+                        }
+                        if ( strlen(my_icache.entry[j].ATTR) > strlen(my_icache.entry[j+1].ATTR)){
+                            memmove( my_icache.entry[j].ATTR, my_icache.entry[j+1].ATTR, strlen(my_icache.entry[j].ATTR));
+                        }
+                        if ( strlen(my_icache.entry[j].ATTR) <= strlen(my_icache.entry[j+1].ATTR)){
+                            memmove( my_icache.entry[j].ATTR, my_icache.entry[j+1].ATTR, strlen(my_icache.entry[j+1].ATTR));
+                        }
+                        if ( strlen(my_icache.entry[j].REGION) > strlen(my_icache.entry[j+1].REGION)){
+                            memmove( my_icache.entry[j].REGION, my_icache.entry[j+1].REGION, strlen(my_icache.entry[j].REGION));
+                        }
+                        if ( strlen(my_icache.entry[j].REGION) <= strlen(my_icache.entry[j+1].REGION)){
+                            memmove( my_icache.entry[j].REGION, my_icache.entry[j+1].REGION, strlen(my_icache.entry[j+1].REGION));
+                        }
                     }
-                    if ( strlen(my_icache.entry[i].ATTR) > strlen(my_icache.entry[i+1].ATTR)){
-                        memmove( my_icache.entry[i].ATTR, my_icache.entry[i+1].ATTR, strlen(my_icache.entry[i].ATTR));
-                    }
-                    if ( strlen(my_icache.entry[i].ATTR) <= strlen(my_icache.entry[i+1].ATTR)){
-                        memmove( my_icache.entry[i].ATTR, my_icache.entry[i+1].ATTR, strlen(my_icache.entry[i+1].ATTR));
-                    }
-                    if ( strlen(my_icache.entry[i].REGION) > strlen(my_icache.entry[i+1].REGION)){
-                        memmove( my_icache.entry[i].REGION, my_icache.entry[i+1].REGION, strlen(my_icache.entry[i].REGION));
-                    }
-                    if ( strlen(my_icache.entry[i].REGION) <= strlen(my_icache.entry[i+1].REGION)){
-                        memmove( my_icache.entry[i].REGION, my_icache.entry[i+1].REGION, strlen(my_icache.entry[i+1].REGION));
-                    }
-                    
                 }
                 my_icache.number_entry--;
                 i--;

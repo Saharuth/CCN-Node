@@ -97,8 +97,8 @@ static wifi_country_t wifi_country = {.cc="CN", .schan = 1, .nchan = 13};
 
 static const char *TAG = "CCN_Node";
 static esp_netif_t *netif_sta = NULL;
-static char *attr = "temp";
-static char *region = "home/living";
+static char *attr = "temper";
+static char *region = "home/kitchen";
 
 static uint8_t tx_data_buf[1500];
 static uint8_t tx_intro_buf[1500];

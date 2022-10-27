@@ -29,7 +29,7 @@
 #define SSID "PAKAPORN_2.4G"
 #define PASSWD "0873930740"
 
-#define ESP_WIFI_SSID      "ESP32CAM_2"
+#define ESP_WIFI_SSID      "ESP32CAM_6"
 #define ESP_WIFI_PASS      "123456789"
 #define ESP_WIFI_CHANNEL   (1)
 #define MAX_STA_CONN       (10)
@@ -97,8 +97,8 @@ static wifi_country_t wifi_country = {.cc="CN", .schan = 1, .nchan = 13};
 
 static const char *TAG = "CCN_Node";
 static esp_netif_t *netif_sta = NULL;
-static char *attr = "temper";
-static char *region = "home/kitchen";
+static char *attr = "light";
+static char *region = "home/bedroom";
 
 static uint8_t tx_data_buf[1500];
 static uint8_t tx_intro_buf[1500];
@@ -236,14 +236,17 @@ void wifi_sniffer_packet_handler(void* buff, wifi_promiscuous_pkt_type_t type)
         uint8_t node_addr[6];
        
         memcpy(attr_n, &ipkt->payload[3], ipkt->payload[2]);
+        memcpy( &attr_n[ipkt->payload[2]], "\n", 2);
         memcpy(region_n, &ipkt->payload[3+(ipkt->payload[2])+1], ipkt->payload[3+(ipkt->payload[2])]);
+        memcpy( &region_n[ipkt->payload[3+(ipkt->payload[2])]], "\n", 2);
+        memcpy( node_addr, hdr->addr2, 6);
         
-        for(int k=0; k<6; k++)
-            node_addr[k] = hdr->addr2[k];
-        ESP_LOGW(TAG, "PACKET TYPE= Intro Packet, RSSI=%02d ATTR: %s REGION: %s", ppkt->rx_ctrl.rssi ,attr_n, region_n);
+        //ESP_LOGW(TAG, "PACKET TYPE= Intro Packet, RSSI=%02d ATTR: %s REGION: %s", ppkt->rx_ctrl.rssi ,attr_n, region_n);
+        ESP_LOGW(TAG, "PACKET TYPE= Intro Packet, RSSI=%02d MAC:"MACSTR"", ppkt->rx_ctrl.rssi, MAC2STR(hdr->addr2));
 
         fib_table(attr_n, ipkt->payload[2], region_n, ipkt->payload[3+(ipkt->payload[2])], node_addr);
-        show_FIB_table();
+        ESP_LOGI(TAG, "FIB Table Size:%d Child:%d", my_fib.number_entry, my_child.num);
+        //show_FIB_table();
         forward_intro(attr_n, ipkt->payload[2], region_n, ipkt->payload[3+(ipkt->payload[2])]);
         return;
     }
@@ -264,8 +267,10 @@ void wifi_sniffer_packet_handler(void* buff, wifi_promiscuous_pkt_type_t type)
 
         memcpy( attr_interest, &ipkt->payload[3], ipkt->payload[2]);
         attr_len_in = ipkt->payload[2];
+        memcpy( &attr_interest[ipkt->payload[2]], "\n", 2);
         memcpy( region_interest, &ipkt->payload[3+attr_len_in+1], ipkt->payload[3+attr_len_in]);
         region_len_in = ipkt->payload[3+attr_len_in];
+        memcpy( &region_interest[ipkt->payload[3+attr_len_in]], "\n", 2);
         et_pkt = (ipkt->payload[3 + attr_len_in + region_len_in + 1] << 8) | (ipkt->payload[3 + attr_len_in + region_len_in + 2] & 0xff);
         sr_interest = (ipkt->payload[3 + attr_len_in + region_len_in + 3] << 8) | (ipkt->payload[3 + attr_len_in + region_len_in + 4] & 0xff);
         id_interest = ipkt->payload[0];
@@ -282,7 +287,7 @@ void wifi_sniffer_packet_handler(void* buff, wifi_promiscuous_pkt_type_t type)
         expiration_time[3] = (((ppkt->rx_ctrl.timestamp)+(et_pkt*1000))/1000)%1000;         //milli sec
         expiration_time[4] = (((ppkt->rx_ctrl.timestamp)+(et_pkt*1000))%1000);              //micro sec
 
-        ESP_LOGW(TAG, "PACKET TYPE= Interest Packet, RSSI=%02d",ppkt->rx_ctrl.rssi);
+        ESP_LOGW(TAG, "Receive Interest Packet from Parent RSSI=%02d",ppkt->rx_ctrl.rssi);
         //printf("ATTR:%s REGION:%s SR:%d\n", attr_interest, region_interest, sr_interest);
 
         index[0] = Icache_check( attr_interest, attr_len_in, region_interest, region_len_in);
@@ -304,27 +309,32 @@ void wifi_sniffer_packet_handler(void* buff, wifi_promiscuous_pkt_type_t type)
             else {
                 index[1] = FIB_check( attr_interest, attr_len_in, region_interest, region_len_in);
                 if ( index[1] == 99){
-                    icache_table( id_interest, timestp, attr_interest, attr_len_in, region_interest, region_len_in, expiration_time, sr_interest);
+                    //icache_table( id_interest, timestp, attr_interest, attr_len_in, region_interest, region_len_in, expiration_time, sr_interest);
                     //forward_interest( attr_interest, attr_len_in, region_interest, region_len_in, et_pkt, sr_interest, index[1]);
-                    show_icacahe_table();
+                    //show_icacahe_table();
                     return;
                 }
                 else {
-                    icache_table( id_interest, timestp, attr_interest, attr_len_in, region_interest, region_len_in, expiration_time, sr_interest);
                     forward_interest( attr_interest, attr_len_in, region_interest, region_len_in, et_pkt, sr_interest, index[1]);
-                    show_icacahe_table();
+                    icache_table( id_interest, timestp, attr_interest, attr_len_in, region_interest, region_len_in, expiration_time, sr_interest);
+                    ESP_LOGI(TAG, "Icache Table Size:%d Child:%d", my_icache.number_entry, my_child.num);
+                    //show_icacahe_table();
                 }
             }
         }
         else {
             icache_table( id_interest, timestp, attr_interest, attr_len_in, region_interest, region_len_in, expiration_time, sr_interest);
-            show_icacahe_table();
+            ESP_LOGI(TAG, "Icache Table Size:%d Child:%d", my_icache.number_entry, my_child.num);
+            //show_icacahe_table();
         }
         return;
     }
 
     if (ipkt->payload[1] == 0x01 && match[0]){
         /*****Data Packet****/
+
+        ESP_LOGW(TAG, "Receive Data Packet from "MACSTR" RSSI=%02d", MAC2STR(hdr->addr2), ppkt->rx_ctrl.rssi);
+
         memcpy( forward_data_buf, wifi_hdr, 32);
         forward_data_buf[0] = 0x08;
         forward_data_buf[1] = 0x01;
@@ -336,7 +346,7 @@ void wifi_sniffer_packet_handler(void* buff, wifi_promiscuous_pkt_type_t type)
         }
 
         esp_wifi_80211_tx(WIFI_IF_STA, forward_data_buf, sizeof(wifi_hdr) + ipkt->payload[0], true);
-        ESP_LOGI(TAG, "Forward Introduction Packet from Child Node");
+        ESP_LOGI(TAG, "Forward Data Packet to Parent Node");
     }
 
 /*
@@ -395,49 +405,31 @@ void reset_FIB_table(){
 void fib_table(char attr_node[], int attr_len, char region_node[], int region_len, uint8_t next_hop[6]){
 
     int check[3];
-    int index[3] = {0, 0, 0};
     bool match[3] = {false, false, false};
 
     //printf("%d\n", my_fib.number_entry);
 
     for (int i = 0; i<my_fib.number_entry; i++){
-        check[0] = 0;
-        check[1] = 0;
-        for (int j=0; j<attr_len; j++){
-            if (attr_node[j] == my_fib.entry[i].ATTR[j] ){
-                check[0]++;
-            }
-        }
-        for (int k=0; k<region_len; k++){
-            if (region_node[k] == my_fib.entry[i].REGION[k] ){
-                check[1]++;
-            }
-        }
-        if( check[0] == attr_len ){
+        check[0] = memcmp( attr_node, my_fib.entry[i].ATTR, attr_len);
+        check[1] = memcmp( region_node, my_fib.entry[i].REGION, region_len);
+    
+        if( check[0] == 0 ){
             match[0] = true;
-            index[0] = i;
         }
-        if (check[1] == region_len){
+        if (check[1] == 0){
             match[1] = true;
-            index[1] = i;
         }
         //printf("%d %d\n", match[0], match[1]);
         if (match[0] && match[1]){
             for (int l=0; l<my_fib.entry[i].number_ds; l++){
-                check[2] = 0;
-                for (int m=0; m<6; m++){
-                    if (next_hop[m] == my_fib.entry[i].DS[l][m]){
-                        check[2]++;
-                    }
-                }
-                if (check[2] == 6){
+                check[2] = memcmp( next_hop, my_fib.entry[i].DS[l], 6);
+                if (check[2] == 0){
                     match[2] = true;
                     return;
                 }
             }
             if (!match[2]){
-                for (int n=0; n<6; n++)
-                    my_fib.entry[i].DS[my_fib.entry[i].number_ds][n] = next_hop[n];
+                memcpy( my_fib.entry[i].DS[my_fib.entry[i].number_ds], next_hop, 6);
                 my_fib.entry[i].number_ds++;
                 return;
             }
@@ -445,10 +437,10 @@ void fib_table(char attr_node[], int attr_len, char region_node[], int region_le
     }
     
     memcpy( my_fib.entry[my_fib.number_entry].ATTR, attr_node, attr_len);
+    memcpy( &my_fib.entry[my_fib.number_entry].ATTR[attr_len], "\n", 2);
     memcpy( my_fib.entry[my_fib.number_entry].REGION, region_node, region_len);
-    for (int i=0; i<6; i++){
-        my_fib.entry[my_fib.number_entry].DS[my_fib.entry[my_fib.number_entry].number_ds][i] = next_hop[i];
-    }
+    memcpy( &my_fib.entry[my_fib.number_entry].REGION[region_len], "\n", 2);
+    memcpy( my_fib.entry[my_fib.number_entry].DS[my_fib.entry[my_fib.number_entry].number_ds], next_hop, 6);
     my_fib.entry[my_fib.number_entry].number_ds++;
     my_fib.number_entry++;
     return;
@@ -493,7 +485,9 @@ void icache_table(int id_pkt, int timestp_pkt[], char attr_pkt[], int attr_len, 
     }
 
     memcpy( my_icache.entry[my_icache.number_entry].ATTR, attr_pkt, attr_len);
+    memcpy( &my_icache.entry[my_icache.number_entry].ATTR[attr_len], "\n", 2);
     memcpy( my_icache.entry[my_icache.number_entry].REGION, region_pkt, region_len);
+    memcpy( &my_icache.entry[my_icache.number_entry].REGION[region_len], "\n", 2);
     for (int i=0; i<5; i++){
         my_icache.entry[my_icache.number_entry].TS[i] = timestp_pkt[i];
         my_icache.entry[my_icache.number_entry].ET[i] = et_pkt[i];
@@ -578,7 +572,7 @@ void forward_intro(char attr_child[], int attr_len, char region_child[], int reg
     }
 
 	esp_wifi_80211_tx(WIFI_IF_STA, forward_intro_buf, sizeof(wifi_hdr) + sizeof(intro_hdr) + region_len + attr_len, true);
-    ESP_LOGI(TAG, "Forward Introduction Packet from Child Node");
+    ESP_LOGI(TAG, "Forward Introduction Packet to Parent");
 }
 
 void forward_interest(char attr_in[], int attr_len, char region_in[], int region_len, int et_in, int sr_in, int idx){
@@ -608,15 +602,6 @@ void forward_interest(char attr_in[], int attr_len, char region_in[], int region
         esp_wifi_80211_tx(WIFI_IF_AP, forward_interest_buf, sizeof(wifi_hdr) + attr_len + region_len + sizeof(interest_hdr), true);
         ESP_LOGI(TAG, "Forward Interest to "MACSTR"", MAC2STR(my_fib.entry[idx].DS[i]));
     }
-/*
-    for (int i=0; i<my_child.num; i++){
-        for(int j=0; j<6; j++){
-            forward_interest_buf[j+4] = my_child.sta[i].mac[j];
-            forward_interest_buf[j+10] = my_mac_ap[j];
-        }
-        esp_wifi_80211_tx(WIFI_IF_AP, forward_interest_buf, sizeof(wifi_hdr) + attr_len + region_len + sizeof(interest_hdr), true);
-    }
-*/
 }
 
 int FIB_check(char attr_pkt[], int attr_len, char region_pkt[], int region_len){

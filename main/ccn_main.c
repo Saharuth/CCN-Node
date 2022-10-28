@@ -97,8 +97,8 @@ static wifi_country_t wifi_country = {.cc="CN", .schan = 1, .nchan = 13};
 
 static const char *TAG = "CCN_Node";
 static esp_netif_t *netif_sta = NULL;
-static char *attr = "light";
-static char *region = "home/bedroom";
+static char *attr = "video";
+static char *region = "home/living";
 
 static uint8_t tx_data_buf[1500];
 static uint8_t tx_intro_buf[1500];
@@ -405,11 +405,11 @@ void reset_FIB_table(){
 void fib_table(char attr_node[], int attr_len, char region_node[], int region_len, uint8_t next_hop[6]){
 
     int check[3];
-    bool match[3] = {false, false, false};
 
     //printf("%d\n", my_fib.number_entry);
 
     for (int i = 0; i<my_fib.number_entry; i++){
+        bool match[3] = {false, false, false};
         check[0] = memcmp( attr_node, my_fib.entry[i].ATTR, attr_len);
         check[1] = memcmp( region_node, my_fib.entry[i].REGION, region_len);
     
@@ -447,13 +447,18 @@ void fib_table(char attr_node[], int attr_len, char region_node[], int region_le
 }
 
 void show_FIB_table(){
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    
     printf("############################## FIB Table ###############################\n");
     printf("|\tATTR\t\t|\tREGION\t|\t\tDS\t\t|\n");
     printf("------------------------------------------------------------------------\n");
     for (int i=0; i<my_fib.number_entry; i++){
-        printf("|\t%s\t",my_fib.entry[i].ATTR);
-        printf("|\t%s\t",my_fib.entry[i].REGION);
+        printf("|\t");
+        for ( int k=0; k<(strlen(my_fib.entry[i].ATTR)-1); k++)
+            printf("%c",my_fib.entry[i].ATTR[k]);
+        printf("\t|\t");
+        for ( int k=0; k<(strlen(my_fib.entry[i].REGION)-1); k++)
+            printf("%c",my_fib.entry[i].REGION[k]);
+        printf("\t");
         for (int j=0; j<my_fib.entry[i].number_ds; j++){
             if (j > 0){
                 printf("\n\t\t\t\t\t|\t"MACSTR"\t|", MAC2STR(my_fib.entry[i].DS[j]));
@@ -507,9 +512,13 @@ void show_icacahe_table(){
         printf("| %d | ", my_icache.entry[i].ID);
         for (int j=0; j<5; j++)
             printf("%02d:", my_icache.entry[i].TS[j]);
-        printf(" ");
-        printf("| %s ", my_icache.entry[i].ATTR);
-        printf("|\t%s\t| ", my_icache.entry[i].REGION);
+        printf(" | ");
+        for (int j=0; j<(strlen(my_icache.entry[i].ATTR)-1); j++)
+            printf("%c", my_icache.entry[i].ATTR[j]);
+        printf(" |\t");
+        for (int j=0; j<(strlen(my_icache.entry[i].REGION)-1); j++)
+            printf("%c", my_icache.entry[i].REGION[j]);
+        printf("\t| ");
         for (int j=0; j<5; j++)
             printf("%02d:", my_icache.entry[i].ET[j]);
         printf(" ");

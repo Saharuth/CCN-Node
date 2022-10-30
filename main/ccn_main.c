@@ -119,6 +119,7 @@ static bool data_running = false;
 
 static int sample_rate = 0;
 static uint64_t expire_time = 0;
+static uint64_t interval_data = 0;
 
 static ccn_fib_tables my_fib;
 static ccn_icache_tables my_icache;
@@ -301,7 +302,7 @@ void wifi_sniffer_packet_handler(void* buff, wifi_promiscuous_pkt_type_t type)
                 intro_running = false;
                 data_running = true;
                 sample_rate = sr_interest;
-                expire_time = (ppkt->rx_ctrl.timestamp)+(et_pkt*1000);
+                interval_data = et_pkt*1000;
                 //icache_table( id_interest, timestp, attr_interest, attr_len_in, region_interest, region_len_in, expiration_time, sr_interest);
                 //show_icacahe_table();
                 return;
@@ -679,6 +680,9 @@ void data_task(void *pvParameter) {
         if(data_running){
             char message[] = "This is message";
 
+            if (send_count == 1)
+                expire_time = esp_timer_get_time() + interval_data;
+
             memcpy( tx_data_buf, wifi_hdr, 32);
             tx_data_buf[0] = 0x08;
             tx_data_buf[1] = 0x01; //STA->AP
@@ -850,6 +854,24 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED){
+        ESP_LOGW(TAG, "<WIFI_EVENT_STA_CONNECTED>");
+        intro_running = true;
+        sniffer_running = true;
+        ESP_ERROR_CHECK(esp_comm_p2p_start());
+    }
+    else if ( event_base == WIFI_EVENT && event_id == WIFI_EVENT_ACTION_TX_STATUS){
+        ESP_LOGW(TAG, "<WIFI_EVENT_ACTION_TX_STATUS>");
+    }
+    else if ( event_base == WIFI_EVENT && event_id == WIFI_EVENT_CONNECTIONLESS_MODULE_WAKE_INTERVAL_START){
+        ESP_LOGW(TAG, "<WIFI_EVENT_CONNECTIONLESS_MODULE_WAKE_INTERVAL_START>");
+    }
+    else if ( event_base == WIFI_EVENT && event_id == WIFI_EVENT_ROC_DONE){
+        ESP_LOGW(TAG, "<WIFI_EVENT_ROC_DONE>");
+    }
+    else if ( event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_BEACON_TIMEOUT){
+        ESP_LOGW(TAG, "<WIFI_EVENT_STA_BEACON_TIMEOUT>");
+    }
 }
 
 void showTable(wifi_ap_record_t AP_info[], uint16_t AP_count)
@@ -904,7 +926,7 @@ static int wifi_scan_router_rssi(void)
     return wifi_rssi;
 }
 
-void wifi_init_sta(uint8_t parent_ssid[])
+void wifi_init_sta(uint8_t parent_ssid[], uint8_t parent_mac[])
 {
     char ESP_PARENT_WIFI_SSID[10];
     memcpy( ESP_PARENT_WIFI_SSID, parent_ssid, 10);
@@ -951,10 +973,7 @@ void wifi_init_sta(uint8_t parent_ssid[])
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "connected to Parent Node");
-        intro_running = true;
-        sniffer_running = true;
-        ESP_ERROR_CHECK(esp_comm_p2p_start());
+        ESP_LOGI(TAG, "connected to Parent Node: "MACSTR"", MAC2STR(parent_mac));
     }
     else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGI(TAG, "Failed to connect to Parent Node");
@@ -1005,7 +1024,7 @@ void scan_parant_node(void)
         }
     }
     if ( check[3] ){
-        wifi_init_sta(ap_info[check[2]].ssid);
+        wifi_init_sta(ap_info[check[2]].ssid, ap_info[check[2]].bssid);
         
         for(i=0; i<6; i++){
             parent_mac[i] = ap_info[check[2]].bssid[i];

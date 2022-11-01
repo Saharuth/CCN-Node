@@ -29,7 +29,7 @@
 #define SSID "PAKAPORN_2.4G"
 #define PASSWD "0873930740"
 
-#define ESP_WIFI_SSID      "ESP32CAM_6"
+#define ESP_WIFI_SSID      "ESP32CAM_2"
 #define ESP_WIFI_PASS      "123456789"
 #define ESP_WIFI_CHANNEL   (1)
 #define MAX_STA_CONN       (10)
@@ -111,6 +111,7 @@ static uint8_t my_mac_ap[6];
 static uint8_t parent_mac[6];
 static uint8_t broadcast_mac[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 static uint8_t test_mac[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+static uint8_t zero_mac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 static wifi_sta_list_t my_child;
 static int my_layer[2] = {0,1};
 static bool intro_running = false;
@@ -168,6 +169,7 @@ void sendlayer(int mylayer, uint8_t child_mac[6]);
 void data_task(void *pvParameter);
 void sniffer_task(void *pvParameter);
 void update_icache(void *pvParameter);
+void update_fib(uint8_t mac[6]);
 void fib_table(char attr_node[], int attr_len, char region_node[], int region_len, uint8_t next_hop[6]);
 void icache_table(int id_pkt, int timestp_pkt[], char attr_pkt[], int attr_len, char region_pkt[], int region_len, int et_pkt[], int sr_pkt);
 void reset_FIB_table();
@@ -778,6 +780,67 @@ void update_icache(void *pvParameter){
     }
 }
 
+void update_fib(uint8_t mac[6]){
+
+    for (int i=0; i<my_fib.number_entry; i++){
+        if ((my_fib.entry[i].number_ds <= 1) && (memcmp( mac, my_fib.entry[i].DS[0], 6))){
+            for (int j=i; j<my_fib.number_entry; j++){
+                if (my_fib.number_entry - j == 1){
+                    memmove( my_fib.entry[j].ATTR, " ", strlen(my_fib.entry[j].ATTR));
+                    memmove( my_fib.entry[j].REGION, " ", strlen(my_fib.entry[j].REGION));
+                    for (int p=0; p<my_fib.entry[j].number_ds; p++){
+                        memmove( my_fib.entry[j].DS[p], zero_mac, 6);
+                    }
+                    my_fib.entry[j].number_ds = 0;
+                }
+                else{
+                    if ( strlen(my_fib.entry[j].ATTR) > strlen(my_fib.entry[j+1].ATTR)){
+                        memmove( my_fib.entry[j].ATTR, my_fib.entry[j+1].ATTR, strlen(my_fib.entry[j].ATTR));
+                    }
+                    if ( strlen(my_fib.entry[j].ATTR) <= strlen(my_fib.entry[j+1].ATTR)){
+                        memmove( my_fib.entry[j].ATTR, my_fib.entry[j+1].ATTR, strlen(my_fib.entry[j+1].ATTR));
+                    }
+                    if ( strlen(my_fib.entry[j].REGION) > strlen(my_fib.entry[j+1].REGION)){
+                        memmove( my_fib.entry[j].REGION, my_fib.entry[j+1].REGION, strlen(my_fib.entry[j].REGION));
+                    }
+                    if ( strlen(my_fib.entry[j].REGION) <= strlen(my_fib.entry[j+1].REGION)){
+                        memmove( my_fib.entry[j].REGION, my_fib.entry[j+1].REGION, strlen(my_fib.entry[j+1].REGION));
+                    }
+                    my_fib.entry[j].number_ds = my_fib.entry[j+1].number_ds;
+                    for (int p=0; p<my_fib.entry[j+1].number_ds; p++){
+                        memmove( my_fib.entry[j].DS[p], my_fib.entry[j+1].DS[p], 6);
+                    }
+                }
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
+            my_fib.number_entry--;
+            i--;
+        }
+        else{
+            for (int j=0; j<my_fib.entry[i].number_ds; j++){
+                if ((memcmp( mac, my_fib.entry[i].DS[j], 6))){
+                    for( int k=j; k<my_fib.entry[i].number_ds; k++){
+                        if (my_fib.entry[i].number_ds - k == 1){
+                            memmove( my_fib.entry[i].DS[k], zero_mac, 6);
+                        }
+                        else{
+                            memmove( my_fib.entry[i].DS[k], my_fib.entry[i].DS[k+1], 6);
+                        }
+                    }
+                    my_fib.entry[i].number_ds--;
+                    j--;
+                    if (my_fib.entry[i].number_ds == 0){
+                        i--;
+                    }
+                }
+            }
+        }
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+    ESP_LOGI(TAG, "FIB Table Size:%d Child:%d", my_fib.number_entry, my_child.num);
+    //show_FIB_table();
+}
+
 void chip_information(void){
     /* Print chip information */
     esp_chip_info_t chip_info;
@@ -826,6 +889,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d", MAC2STR(event->mac), event->aid);
+        update_fib(event->mac);
     }
 }
 
